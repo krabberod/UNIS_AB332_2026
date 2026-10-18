@@ -10,8 +10,8 @@ The time table is tentatively as follows:
 | :------------ | :------ |
 | **Tuesday**   | [What is metabarcoding? From DNA to sequence data](./Lectures/Introduction_to_Metabarcoding_AB332.pdf) |
 |               | [From reads to OTUs and ASVs: clustering and denoising](./Lectures/Clustering_lecture_2026.pdf) |
-|               | [Getting started with R](./Lectures/introduction_to_R_2026.pdf) |
-|               | [Working in RStudio](./Lectures/Introduction_to_Rstudio_2026.pdf) |
+|               | [Getting started with R](./Lectures/introduction_to_R.pdf) |
+|               | [Working in RStudio](./Lectures/Introduction_to_Rstudio.pdf) |
 |               | [Computer lab I – Exploring the data: sequencing depth, rarefaction and diversity](computer_lab/) |
 | **Wednesday** | [Computer lab II – Comparing communities: distances, ordination and clustering](computer_lab/) |
 |               | [Computer lab III – Linking communities to the environment: envfit and constrained ordination](computer_lab/) |
