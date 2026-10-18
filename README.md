@@ -8,7 +8,7 @@ The time table is tentatively as follows:
 
 | Day           | Session |
 | :------------ | :------ |
-| **Tuesday**   | [What is metabarcoding? From DNA to sequence data](./Lectures/Introduction_to_Metabarcoding_AB332_2026.pdf) |
+| **Tuesday**   | [What is metabarcoding? From DNA to sequence data](./Lectures/Introduction_to_Metabarcoding_AB332.pdf) |
 |               | [From reads to OTUs and ASVs: clustering and denoising](./Lectures/Clustering_lecture_2026.pdf) |
 |               | [Getting started with R](./Lectures/introduction_to_R_2026.pdf) |
 |               | [Working in RStudio](./Lectures/Introduction_to_Rstudio_2026.pdf) |
