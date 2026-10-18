@@ -1,0 +1,318 @@
+---
+title: " Community ecology - Computer lab II - AB332"
+author: "Anders K. Krabberød (UiO) based on scripts by Ramiro Logares (ICM)"
+date: "October 2026"
+output:
+  html_notebook: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+  markdown:
+    wrap: 72
+---
+
+# Computer lab II
+
+First load the necessary packages.
+
+```{r,include=FALSE}
+library(vegan)
+library(tidyverse)
+library(PCAtools)
+library(recluster)
+library(ape)       # For plotting trees
+library(ggrepel)   # For geom_text_repel function
+```
+
+Now load the the data from the previous lab (change path to the file if
+necessary):
+
+```{r}
+load("AB332_lab_I.RData")
+# This should load: otu.tab, metadata, otu.vegan, otu.vegan.ss.nozero, etc.
+# If you get an error, make sure you have run Computer_lab_I.Rmd first
+```
+
+# Distance metrics
+
+Let's calculate the Bray Curtis dissimilarities for the rarefied dataset
+Bray–Curtis dissimilarity ranges from 0 to 1:
+* 0: Identical OTU abundance profiles.
+* 1: No shared OTUs.
+* Between 0 and 1: Increasing differences in OTU composition and relative abundance.
+
+
+```{r}
+otu.vegan.ss.nozero.bray <- vegdist(otu.vegan.ss.nozero, method = "bray") # calculated distance
+as.matrix(otu.vegan.ss.nozero.bray)[1:5, 1:5]
+```
+
+- *What kind of data is the Bray-Curtis dissimilarity suitable for?*
+- *How can you change the dissimilarity index in the previous chunk of
+  code?*
+
+# Ordination and clustering
+
+## PCA
+
+Pca from the rarefied table
+
+```{r}
+otu.vegan.ss.nozero.pca <- PCAtools::pca(t(otu.vegan.ss.nozero), scale = FALSE) # Runs the PCA
+PCAtools::biplot(otu.vegan.ss.nozero.pca, showLoadings = TRUE, x = "PC1", y = "PC2", lab = rownames(otu.vegan.ss.nozero)) # Plots the PCA
+screeplot(otu.vegan.ss.nozero.pca, axisLabSize = 7, titleLabSize = 22) # We plot the percentage of variance explained by each axis
+```
+
+## NMDS
+
+We will define the function NMDS.scree() that automatically performs a
+NMDS for 1-8 dimensions and plots the number of dimensions vs. stress
+
+```{r}
+set.seed(666) # Set a seed to make results reproducible
+NMDS.scree <- function(x, reps = 7, ks = 1:8) {# x is the name of the distance matrix
+  stresses <- sapply(ks, function(k) replicate(reps, vegan::metaMDS(x, autotransform = FALSE, k = k, trace = FALSE)$stress))
+  plot(NA, xlim = range(ks), ylim = range(stresses), xlab = "# of Dimensions", ylab = "Stress",
+       main = "NMDS stress plot")
+  for (j in seq_along(ks)) points(rep(ks[j], reps), stresses[, j])
+}
+```
+
+Using the function to determine the optimal number of dimensions Using
+the rarefied table
+
+```{r}
+NMDS.scree(otu.vegan.ss.nozero.bray)
+```
+
+We calculate NMDS for k(dimensions)=3 for the rarefied table
+
+```{r}
+set.seed(666)  # For reproducible results
+otu.vegan.ss.nozero.bray.nmds <- metaMDS(otu.vegan.ss.nozero.bray, k = 3, trymax = 50, trace = FALSE)
+
+# Check the result
+stress_value <- round(otu.vegan.ss.nozero.bray.nmds$stress, 3)
+stress_value
+```
+
+- *Stress: How good is our NMDS?*
+  < 0.05, Excellent
+  0.05–0.10, Very good
+  0.10–0.20, Generally usable
+  0.20–0.30, Potentially misleading
+  ≥ 0.30 Poor representation
+
+# Make stressplot
+
+```{r}
+stressplot(otu.vegan.ss.nozero.bray.nmds)
+```
+
+Simple plotting of NMDS using the base plotting functions
+
+```{# r}
+plot(otu.vegan.ss.nozero.bray.nmds, display = "sites", type = "n")
+points(otu.vegan.ss.nozero.bray.nmds, display = "sites", col = "red", pch = 19)
+
+# With many samples, text labels will be crowded, so let's make them smaller
+text(otu.vegan.ss.nozero.bray.nmds, display = "sites", cex = 0.6)
+```
+
+### Let's make nicer plots
+
+We use the metadata for the samples that was loaded in lab I
+
+```{r}
+# inspect the the data
+metadata
+```
+
+Make the date a real date and the season and year factors:
+
+```{r}
+metadata <- metadata %>%
+  mutate(
+    date = dmy(date),
+    year = as.factor(year),
+    seasons = factor(seasons, levels = c("winter", "spring", "summer", "autumn"))
+  )
+```
+
+Next, we generate a table of nmds scores and join it with the metadata
+
+```{r}
+otu.vegan.ss.nozero.bray.nmds.scores <- scores(otu.vegan.ss.nozero.bray.nmds) %>%
+  as.data.frame() %>%
+  rownames_to_column("Sample_Name") %>%
+  left_join(metadata, by = "Sample_Name") %>%
+  as_tibble()
+otu.vegan.ss.nozero.bray.nmds.scores
+```
+
+Create the plot, colored by season
+
+```{r}
+# Option 1: Plot without labels (cleaner with many samples)
+p1 <- ggplot(otu.vegan.ss.nozero.bray.nmds.scores) +
+  geom_point(mapping = aes(x = NMDS1, y = NMDS2, colour = seasons, shape = year), size = 2) +
+  coord_fixed() + ## need aspect ratio of 1!
+  labs(title = "NMDS - Colored by Season") +
+  theme_bw()
+print(p1)
+```
+
+If you really want full sample labels (will be crowded!)
+
+```{r}
+p2 <- ggplot(otu.vegan.ss.nozero.bray.nmds.scores) +
+  geom_point(mapping = aes(x = NMDS1, y = NMDS2, colour = seasons), size = 1.5) +
+  coord_fixed() +
+  geom_text_repel(
+    box.padding = 0.2,
+    aes(x = NMDS1, y = NMDS2, label = Sample_Name),
+    size = 1.8,
+    max.overlaps = 30,  # Allow more overlaps
+    force = 0.5  # Reduce repelling force
+  ) +
+  labs(title = "NMDS - All sample labels (crowded)") +
+  theme_bw()
+print(p2)
+```
+
+- *Try to colour the plot by another variable in the metadata, e.g.
+  `month` or `temp_25`.*
+
+# Clustering of samples
+
+Allows determining the similarity between samples as well as the
+organization of samples in groups. Hierarchical clustering: samples will
+be organized in ranks according to their similarity and all samples will
+be included in a large group Unweighted Pair-Group Method Using
+Arithmetic Averages (UPGMA): This linkage method will link samples by
+considering their distance to a subgroup arithmetic average. This is a
+method widely used in ecology
+
+### UPGMA
+
+Rarefied dataset We generate 100 trees by re-sampling and then, we plot
+the consensus tree
+
+```{r}
+otu.vegan.ss.nozero.bray.upgma <- recluster.cons(otu.vegan.ss.nozero.bray, tr = 100, p = 0.5, method = "average")
+plot(otu.vegan.ss.nozero.bray.upgma$cons) # plot consensus tree
+```
+
+We'll calculate bootstrap support values (0: bad - 100: perfect) This
+allows us to know how well supported is the branching pattern **Note:
+With 82 samples, bootstrapping will take a long time (several minutes
+depending on your computer)**
+
+```{r}
+# set the number of boostraps:
+boots <- 100
+otu.vegan.ss.nozero.bray.upgma.boot <- recluster.boot(otu.vegan.ss.nozero.bray.upgma$cons,
+                                                      otu.vegan.ss.nozero, tr = 50, p = 0.5,
+                                                      method = "average", boot = boots, level = 1)
+```
+
+## Better Tree Visualizations
+
+```{r}
+# Prepare the data
+tree <- otu.vegan.ss.nozero.bray.upgma$cons
+boot <- as.data.frame(otu.vegan.ss.nozero.bray.upgma.boot)$V1
+
+# Colour the samples by season
+season_colors <- c(winter = "steelblue", spring = "forestgreen", summer = "orange", autumn = "brown")
+tip_seasons <- tibble(Sample_Name = tree$tip.label) %>%
+  left_join(metadata, by = "Sample_Name") %>%
+  pull(seasons)
+tip_colors <- season_colors[as.character(tip_seasons)]
+```
+
+### Plots with ape
+
+```{r}
+# PLOT 1: Enhanced Rectangular Tree
+par(mfrow = c(1, 1), mar = c(1, 1, 3, 1))
+plot.phylo(tree, type = "phylogram",
+           show.tip.label = TRUE,
+           tip.color = tip_colors,
+           cex = 0.4,  # Smaller text for many samples
+           edge.width = 1.2,
+           main = "UPGMA Tree - Enhanced Rectangular Layout",
+           font = 2)
+
+# Add bootstrap values with better formatting
+# Only show bootstrap values ≥ 50 to reduce clutter
+high_boot <- boot
+high_boot[boot < 50] <- NA  # Hide low bootstrap values
+nodelabels(high_boot,
+           frame = "circle",
+           cex = 0.5,
+           col = "white",
+           bg = ifelse(boot >= 70, "darkgreen",
+                      ifelse(boot >= 50, "orange", "lightgray")),
+           font = 2)
+
+# Add legend for bootstrap support and seasons
+legend("topleft",
+       legend = c("≥70% (Strong)", "50-69% (Moderate)", "<50% (Weak)"),
+       fill = c("darkgreen", "orange", "lightgray"),
+       title = "Bootstrap Support",
+       cex = 0.7)
+legend("bottomleft",
+       legend = names(season_colors),
+       fill = season_colors,
+       title = "Season",
+       cex = 0.7)
+```
+
+### Summary Statistics and Tree Quality Assessment
+
+```{r}
+# Display tree statistics
+length(tree$tip.label) # Number of tips (samples)
+tree$Nnode             # Number of internal nodes
+is.rooted(tree)        # Tree is rooted
+is.binary(tree)        # Tree is binary
+
+# Bootstrap support summary
+summary(boot)
+sum(boot >= 70, na.rm = TRUE)              # Strong support (≥70%)
+sum(boot >= 50 & boot < 70, na.rm = TRUE)  # Moderate support (50-69%)
+sum(boot < 50, na.rm = TRUE)               # Weak support (<50%)
+
+# # Create a histogram of bootstrap values
+# hist(boot,
+#      breaks = 20,
+#      main = "Distribution of Bootstrap Support Values",
+#      xlab = "Bootstrap Support (%)",
+#      ylab = "Number of Nodes",
+#      col = "lightblue",
+#      border = "darkblue")
+# abline(v = 70, col = "red", lwd = 2, lty = 2)
+# abline(v = 50, col = "orange", lwd = 2, lty = 2)
+# legend("topleft",
+#        legend = c("Strong (70%)", "Moderate (50%)"),
+#        col = c("red", "orange"),
+#        lty = 2, lwd = 2)
+```
+
+```{r}
+ggplot(tibble(boot = boot), aes(x = boot)) +
+  geom_histogram(bins = 20, fill = "lightblue", colour = "darkblue") +
+  geom_vline(xintercept = c(50, 70), colour = c("orange", "red"), linetype = "dashed", linewidth = 1) +
+  labs(x = "Bootstrap Support (%)", y = "Number of Nodes", title = "Distribution of Bootstrap Support Values") +
+  theme_minimal()
+```
+
+```{r}
+# Save all variables for use in Lab III
+save.image("AB332_lab_II.RData")
+# OR save only the objects that are interesting:
+saveRDS(metadata, "metadata.rds")
+```

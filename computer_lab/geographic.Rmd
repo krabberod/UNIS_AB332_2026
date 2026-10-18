@@ -1,0 +1,73 @@
+---
+title: "Geographic distribution"
+output: html_document
+date: "2026-10-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Geographic location
+
+
+```{r}
+# Geographic coordinates for sampling locations
+IMOS_long_lat <- data.frame(Location = c("BAB", "IsK", "IsG"), 
+                   Latitude = c(78.658333, 78.320667, 78.128833),
+                   Longitude = c(16.675, 15.162667, 14.002833), 
+                   Bottom_depth = c(191, 274, 273))
+
+print("Geographic coordinates of sampling locations:")
+print(IMOS_long_lat)
+
+# Calculate distances between locations (in km)
+library(geosphere)
+print("\nDistances between sampling locations (km):")
+for(i in 1:nrow(IMOS_long_lat)) {
+  for(j in 1:nrow(IMOS_long_lat)) {
+    if(i < j) {
+      dist_km <- distHaversine(c(IMOS_long_lat$Longitude[i], IMOS_long_lat$Latitude[i]),
+                               c(IMOS_long_lat$Longitude[j], IMOS_long_lat$Latitude[j])) / 1000
+      cat(paste(IMOS_long_lat$Location[i], "to", IMOS_long_lat$Location[j], ":", 
+                round(dist_km, 1), "km\n"))
+    }
+  }
+}
+```
+
+
+### Geographic Map of Sampling Sites
+
+Let's create a map showing where the samples were collected:
+
+```{r}
+library(maps)
+library(mapdata)
+
+# Create a map of the sampling region (Svalbard)
+print("Map of sampling locations")
+
+# Basic map
+map_plot <- ggplot() +
+  # Add map background (world map)
+  borders("world", colour = "gray50", fill = "gray90") +
+  # Add sampling points
+  geom_point(data = IMOS_long_lat, 
+             aes(x = Longitude, y = Latitude, size = Bottom_depth, colour = Location),
+             alpha = 0.8) +
+  # Add location labels
+  geom_text_repel(data = IMOS_long_lat,
+                  aes(x = Longitude, y = Latitude, label = Location),
+                  size = 4, fontface = "bold") +
+  # Set map boundaries around Svalbard
+  coord_cartesian(xlim = c(10, 20), ylim = c(77, 79.5)) +
+  labs(title = "IMOS Sampling Locations - Svalbard",
+       x = "Longitude (°E)", y = "Latitude (°N)",
+       size = "Depth (m)", colour = "Location") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 10),
+        plot.title = element_text(size = 14, face = "bold"))
+
+print(map_plot)
+```

@@ -1,0 +1,597 @@
+---
+title: "Community ecology - Computer lab I - AB332"
+author: "Anders K. Krabberød (UiO) based on scripts by Ramiro Logares (ICM)"
+date: "October 2026"
+output:
+  html_notebook: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+  markdown: 
+    wrap: sentence
+---
+
+> This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook.
+> When you execute code within the notebook, the results appear beneath the code.
+> Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter* (Mac).
+>
+> Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I* (Mac).
+>
+> When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* (Mac) to preview the HTML file).
+>
+> The preview shows you a rendered HTML copy of the contents of the editor.
+> Consequently, unlike *Knit*, *Preview* does not run any R code chunks.
+> Instead, the output of the chunk when it was last run in the editor is displayed.
+
+Make sure you have installed all packages!
+
+### Load Packages
+
+```{r,include=FALSE}
+library(vegan)
+library(tidyverse)
+```
+
+# Starting community ecology analyses
+
+## 1. Explore the data
+
+Read the OTU table and the metadata from the local data folder:
+
+```{r}
+otu.tab <- read_tsv("data/AB332_otutab.tsv")
+metadata <- read_tsv("data/AB332_metadata_v3.tsv")
+```
+
+First, get to know the data: - *How many columns and how many rows are in the dataset?* - *What do the letters in the sample names mean?* - *What additional data than samples and otus are in the data set?*
+
+```{r}
+head(otu.tab)
+dim(otu.tab)
+colnames(otu.tab)
+```
+
+You can also see the entire table with the `View()` function:
+
+```{r}
+View(otu.tab)
+```
+
+You can look at a given selection of the table by specifying a range of rows and columns:
+
+```{r}
+otu.tab %>%
+  slice(1:10) %>%   # The first 10 rows
+  select(1:5)       # The first 5 columns
+```
+
+- *See if you can choose a different subset. For instance the first 5 colums with sample data or OTUs 20-26:*
+
+```{r}
+
+```
+
+## 2. Calculate abundances
+
+You can get the total number of reads for each sample using `colSums()`, and the total reads per OTU with `rowSums()`.
+In this table the samples are columns and the OTUs are rows.
+- *Do you understand what these two functions do just by looking at their names?*
+
+```{r}
+# Total reads per sample
+otu.tab %>%
+  select(-OTUNumber) %>%
+  colSums()
+```
+
+```{r}
+# Total reads per OTU
+otu.tab %>%
+  mutate(total = rowSums(across(-OTUNumber))) %>%
+  select(OTUNumber, total) %>%
+  head() # Too many to show them all.
+```
+
+- *Can you figure out a way to view only the last part of the the list of total reads per OTU? Hint: look up the help file for the head() function*:
+
+```{r}
+?head
+```
+
+## 3. Filter the data
+
+It is generally a good idea to check if any OTU's have a total abundance of zero.
+The following will print the number of OTUs in the data set that has a sum equal to 0:
+
+```{r}
+otu.tab %>%
+  filter(rowSums(across(-OTUNumber)) == 0) %>%
+  nrow()
+```
+
+The pipe `%>%` passes the result of one line on to the next.
+In "normal" language the code reads: take the OTU table, keep the OTUs where the sum is exactly zero, then count the rows.
+
+We can use the same idea to keep only the OTUs with a total number of reads above 1 (i.e remove singletons):
+
+```{r}
+otu.tab <- otu.tab %>%
+  filter(rowSums(across(-OTUNumber)) > 1)
+```
+
+How many have more than 1 reads?
+
+```{r}
+nrow(otu.tab)
+```
+
+Can you find how many OTU's that have more than 10 reads (in total)?
+We should probably filter out the OTUs that are very low in read count. 
+Why do you think this is done, and what is the minimum threshold?
+
+```{r}
+
+```
+
+## 4. Visualize sequencing depth
+
+Let's visualize the total sequence reads per sample using ggplot.
+This helps us identify which samples have high or low sequencing depth.
+ggplot works best with a "tidy" (long) table, where each row is one observation:
+
+```{r}
+otu.tab.long <- otu.tab %>%
+  pivot_longer(-OTUNumber, names_to = "Sample_Name", values_to = "reads")
+otu.tab.long
+```
+
+Create a data frame with sample names and their read counts, and add the date and season from the metadata:
+
+```{r}
+read_counts <- otu.tab.long %>%
+  group_by(Sample_Name) %>%
+  summarise(reads = sum(reads)) %>%
+  left_join(metadata %>% select(Sample_Name, date, seasons), by = "Sample_Name") %>%
+  mutate(date = dmy(date))
+read_counts
+
+read_counts %>%
+  summarise(min = min(reads), max = max(reads), mean = mean(reads), median = median(reads))
+```
+
+Now lets plot the reads:
+
+```{r}
+# Plot 1: Bar plot of read counts per sample, ordered by read count
+ggplot(read_counts, aes(x = reorder(Sample_Name, reads), y = reads, fill = seasons)) +
+  geom_col() +
+  labs(
+    title = "Total Sequence Reads per Sample",
+    x = "Sample",
+    y = "Number of Reads",
+    fill = "Season"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 0.5, size = 6),
+    plot.title = element_text(size = 14, face = "bold")
+  ) +
+  scale_fill_brewer(type = "qual", palette = "Set2")
+```
+
+```{r}
+# Plot 2: Read counts over time
+ggplot(read_counts, aes(x = date, y = reads, fill = seasons)) +
+  geom_col(width = 5) +
+  labs(
+    title = "Total Sequence Reads per Sample",
+    x = "Date",
+    y = "Reads",
+    fill = "Season"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, face = "bold")) +
+  scale_fill_brewer(type = "qual", palette = "Set2")
+```
+
+```{r}
+# Plot 3: Box plot showing distribution by season
+ggplot(read_counts, aes(x = seasons, y = reads, fill = seasons)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.8) +
+  labs(
+    title = "Distribution of Read Counts by Season",
+    x = "Season",
+    y = "Number of Reads"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_viridis_d(option = "magma", alpha = 0.8)
+```
+
+- *Looking at these plots, which samples have the highest and lowest read counts?*
+- *Do you notice any patterns in read depth between seasons?*
+- *How might differences in sequencing depth affect downstream analyses?*
+- *Are some of the samples outliers? How can we deal with them?*
+
+## 5. Introduce vegan
+
+The following calculations make use of functions in the vegan package written by Jari Oksanen.
+*Vegan is an R package for community ecologists. It contains the most popular methods of multivariate analysis needed in analyzing ecological communities, and tools for diversity analysis, and other potentially useful functions*.
+If you want to learn more about the vegan package you can check out the vignette (a form for introduction) by running: `browseVignettes("vegan")`
+
+Vegan expects a community matrix with **samples as rows** and **OTUs as columns** (a site × species matrix): each row is one observation (a sample) and each column is a variable (a taxon).
+Our OTU table is the other way around, so it needs to be transposed.
+
+## 6. Transpose the data
+
+```{r}
+otu.vegan <- otu.tab %>%
+  column_to_rownames("OTUNumber") %>%
+  as.matrix() %>%
+  t()
+otu.vegan %>%
+  as.data.frame() %>%
+  slice(1:5) %>%   # The first 5 samples
+  select(1:5)      # The first 5 OTUs
+dim(otu.vegan)
+```
+
+- *Compare `dim(otu.vegan)` with `dim(otu.tab)`. What has changed?*
+
+### Rarefaction
+
+Let's calculate the number of reads per sample as rarefaction curves:
+
+```{r}
+rarecurve(otu.vegan, step = 100, xlab = "Number of reads", ylab = "OTU Richness", col = "blue")
+```
+
+The same curves with ggplot (`tidy = TRUE` returns a data frame instead of a plot):
+
+```{r}
+rare.df <- rarecurve(otu.vegan, step = 100, tidy = TRUE) %>%
+  rename(Sample_Name = Site, reads = Sample, richness = Species) %>%
+  left_join(metadata %>% select(Sample_Name, seasons), by = "Sample_Name")
+
+ggplot(rare.df, aes(x = reads, y = richness, group = Sample_Name, colour = seasons)) +
+  geom_line(alpha = 0.7) +
+  labs(x = "Number of reads", y = "OTU Richness", colour = "Season", title = "Rarefaction curves") +
+  theme_minimal() +
+  scale_colour_brewer(palette = "Set2")
+```
+
+- *How do you interpret these curves? Which samples have the lowest number of total reads? Which are the highest?*
+
+### Accumulation curves
+
+```{r}
+accum.curve <- specaccum(otu.vegan, method = "collector")
+plot(accum.curve)
+```
+Again for a prettier plot:
+
+```{r}
+accum.df <- tibble(samples = accum.curve$sites, richness = accum.curve$richness)
+
+ggplot(accum.df, aes(x = samples, y = richness)) +
+  geom_line(colour = "steelblue") +
+  geom_point(colour = "steelblue", size = 1) +
+  labs(x = "Number of samples", y = "Cumulative number of OTUs", title = "Accumulation curve") +
+  theme_minimal()
+```
+
+What does this curve represent?
+How do you interpret it?
+
+### Richness estimations
+
+Now lets do some ecology:
+
+"The abundance-based estimates in estimateR use counts (numbers of individuals) of species in a single site. If called for a matrix or data frame, the function will give separate estimates for each site. The two variants of extrapolated richness in estimateR are bias-corrected Chao and Abundance-based Coverage Estimator (ACE) (O'Hara 2005, Chiu et al. 2014)."
+
+```{#r}
+richness <- estimateR(otu.vegan, smallsample = FALSE)
+richness
+```
+
+If you only want to look at one sample
+
+```{r}
+richness <- estimateR(otu.vegan[1, ], smallsample = TRUE)
+richness
+```
+
+Above we have the estimators Chao and ACE as well as the species number.
+What do the numbers mean?
+
+### Evenness
+
+```{#r}
+# plot(colSums(otu.vegan), log = "y", xlab = "Rank", ylab = "Abundance", pch = 19, cex = 0.5, col = "blue")
+plot(sort(colSums(otu.vegan), decreasing = TRUE), log = "y", xlab = "Rank", ylab = "Abundance", pch = 19, cex = 0.5, col = "blue")
+```
+
+```{r}
+rank.df <- otu.tab %>%
+  mutate(total = rowSums(across(-OTUNumber))) %>%
+  arrange(desc(total)) %>%
+  mutate(rank = row_number())
+
+# Normalised reads:
+# rank.df <- otu.tab %>%
+#   mutate(across(-OTUNumber, ~ .x / sum(.x))) %>%
+#   mutate(total = rowMeans(across(-OTUNumber))) %>%
+#   arrange(desc(total)) %>%
+#   mutate(rank = row_number())
+
+ggplot(rank.df, aes(x = rank, y = total)) +
+  geom_point(colour = "steelblue", size = 0.8) +
+  scale_y_log10() +
+  labs(x = "Rank", y = "Abundance (log scale)", title = "Rank-abundance plot") +
+  theme_minimal()
+```
+
+### Fitting rank-abundance distribution models to the data
+
+Function radfit() constructs rank – abundance or dominance / diversity or Whittaker plots and fit brokenstick, preemption, log-Normal, Zipf and Zipf-Mandelbrot models of species abundance.
+
+```{r}
+mod <- radfit(otu.vegan)
+plot(mod)
+```
+
+And for all species
+
+```{r}
+mod.all <- radfit(colSums(otu.vegan))
+plot(mod.all)
+```
+
+Which model fits best? 
+
+```{r}
+mod.all
+```
+
+```{#r} 
+# for plotting the same, but with ggplot2
+rad.df <- as_tibble(fitted(mod.all)) %>%
+  mutate(rank = row_number(), observed = mod.all$y) %>%
+  pivot_longer(-c(rank, observed), names_to = "model", values_to = "fitted") %>%
+  drop_na(fitted) # Models that could not be fitted give NA
+
+ggplot(rad.df, aes(x = rank)) +
+  geom_point(aes(y = observed), colour = "grey50", size = 0.8) +
+  geom_line(aes(y = fitted, colour = model), linewidth = 0.8) +
+  scale_y_log10() +
+  coord_cartesian(ylim = range(mod.all$y)) + # Limit the y-axis to the observed values
+  labs(x = "Rank", y = "Abundance (log scale)", colour = "Model", title = "Rank-abundance models") +
+  theme_minimal()
+```
+
+### Fitting data to the Preston model
+
+```{r}
+preston <- prestonfit(colSums(otu.vegan))
+preston.dist <- prestondistr(colSums(otu.vegan))
+plot(preston)
+lines(preston.dist, line.col = "blue3")
+```
+
+```{#r}
+preston.df <- tibble(
+  octave = names(preston$freq),
+  observed = preston$freq,
+  prestonfit = fitted(preston),
+  prestondistr = fitted(preston.dist)
+) %>%
+  mutate(octave = fct_inorder(octave))
+
+ggplot(preston.df, aes(x = octave)) +
+  geom_col(aes(y = observed), fill = "grey80") +
+  geom_line(aes(y = prestonfit, group = 1, colour = "prestonfit"), linewidth = 0.8) +
+  geom_line(aes(y = prestondistr, group = 1, colour = "prestondistr"), linewidth = 0.8) +
+  labs(x = "Abundance octave", y = "Number of OTUs", colour = "Model", title = "Preston model") +
+  theme_minimal()
+```
+
+### Extrapolated richness
+
+```{r}
+veiledspec(preston)
+veiledspec(preston.dist)
+```
+
+### Shannon H index (considers richness and evenness)
+
+A diversity index taking into account the number of individuals as well as the number of taxa.
+Varies from 0 for communities with only a single taxon to high values for communities with many taxa, each with few individuals
+
+```{r}
+H <- diversity(otu.vegan, index = "shannon")
+H
+
+H_df <- enframe(H, name = "Sample_Name", value = "H") %>%
+  left_join(read_counts, by = "Sample_Name")
+H_df
+
+ggplot(H_df, aes(x = date, y = H)) +
+  geom_line() +  # Line plot
+  geom_point(aes(colour = seasons)) +  # Points on the line
+  labs(x = "Date", y = "H", title = "H values over time")
+```
+
+### Pielou's index of evenness (range 0-1, 1 = maximum evenness)
+
+`J=H/Hmax` `J=Shannon (H) / log(S=species richness)` A calculated value of Pielou's evenness ranges from 0 (no evenness) to 1 (complete evenness).
+
+```{r}
+J <- H / log(specnumber(otu.vegan)) # specnumber() gives the number of OTUs in each sample
+# J
+J_df <- enframe(J, name = "Sample_Name", value = "J") %>%
+  left_join(read_counts, by = "Sample_Name") %>%
+  arrange(date)
+
+ggplot(J_df, aes(x = date, y = J)) +
+  geom_line() +
+  geom_point(aes(colour = seasons)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = "Date",
+    y = "Pielou's evenness (J)",
+    title = "Community evenness over time",
+    colour = "Season"
+  ) +
+  theme_minimal()
+```
+
+### Inverse Simpson's D index (richness+evenness. Larger values, larger diversity)
+
+The value of Simpson’s D ranges from 0 to 1, with 0 representing infinite diversity and 1 representing no diversity, so the larger the value of 𝐷 , the lower the diversity.
+For this reason, Simpson’s index is usually expressed as its inverse
+
+```{r}
+inv.simpson <- diversity(otu.vegan, "invsimpson")
+# plot(inv.simpson, type = "l", col = "blue")
+```
+
+```{r}
+inv.simpson.df <- enframe(inv.simpson, name = "Sample_Name", value = "inv.simpson") %>%
+  left_join(read_counts, by = "Sample_Name")
+
+ggplot(inv.simpson.df, aes(x = date, y = inv.simpson)) +
+  geom_line(colour = "grey50") +
+  geom_point(aes(colour = seasons)) +
+  labs(x = "Date", y = "Inverse Simpson", colour = "Season", title = "Inverse Simpson over time") +
+  theme_minimal() +
+  scale_colour_brewer(palette = "Set2")
+```
+
+# Beta diversity
+
+Before rarefaction, let's inspect the read counts per sample to identify any samples with very few sequences:
+
+```{r}
+read_counts %>% arrange(reads) # Show all samples ordered by read count
+```
+
+If some samples have very few reads and we rarefy to the minimum, we lose most information from other samples.
+For example to remove samples with fewer than 4000 reads:
+
+```{#r}
+otu.vegan.filtered <- otu.vegan %>%
+  as.data.frame() %>%
+  filter(rowSums(across(everything())) >= 4000) %>% # Keep samples (rows) with at least 4000 reads
+  as.matrix()
+
+# Report what was filtered
+nrow(otu.vegan) - nrow(otu.vegan.filtered) # Number of samples removed
+nrow(otu.vegan.filtered)                   # Remaining samples
+```
+
+Now we rarefy all remaining samples to the same sequencing depth, to reduce biases.
+
+```{r}
+# Calculate the minimum read count of filtered samples
+min_reads <- min(rowSums(otu.vegan))
+min_reads
+
+# Rarefy to the minimum read count of filtered samples
+set.seed(666) # Set a seed to make results reproducible
+otu.vegan.ss <- rrarefy(otu.vegan, min_reads)
+
+# Check results
+rowSums(otu.vegan.ss)
+head(colSums(otu.vegan.ss))
+```
+
+What is the number of reads these samples have been rarified to?
+What does it imply, do you understand how it is done?
+
+Check that the number of OTUs are the same in the new table
+
+```{r}
+dim(otu.vegan)  # Filtered data (before rarefaction)
+dim(otu.vegan.ss)        # After rarefaction
+```
+
+The tables have the same size, but, after removing reads, OTUs might be left with zero read abundance.
+These are typically those with very low abundace to begin with, and (hopefully) do not play an important in the system we are studing.
+
+```{r}
+# select(where(~ sum(.x) == 0)) keeps the columns (OTUs) where the sum is exactly zero
+otu.vegan %>%
+  as.data.frame() %>%
+  select(where(~ sum(.x) == 0)) %>%
+  ncol()
+
+otu.vegan.ss %>%
+  as.data.frame() %>%
+  select(where(~ sum(.x) == 0)) %>%
+  ncol()
+
+otu.vegan.ss %>%
+  as.data.frame() %>%
+  select(where(~ sum(.x) == 0)) %>%
+  colnames() %>%
+  head() # Show the first OTUs that have 0 abundance
+```
+
+- *How many OTUs are empty after rarefaction?*
+
+We can compare the number of reads for a selected OTU (in this case OTU_0013) between the original and the subsampled OTU table:
+
+```{r}
+otu.vegan %>%
+  as.data.frame() %>%
+  select(not_subsampled = OTU_0013) %>%  # The abundance of the OTU in the table that is NOT subsampled
+  bind_cols(
+    otu.vegan.ss %>%
+      as.data.frame() %>%
+      select(subsampled = OTU_0013)      # The abundance of the OTU in the table that IS subsampled
+  )
+```
+
+We can remove the OTUs with zero abundance with a similar idea as we used at the beginning of the lab:
+
+```{r}
+otu.vegan.ss.nozero <- otu.vegan.ss %>%
+  as.data.frame() %>%
+  select(where(~ sum(.x) > 0)) %>% # Removes OTUs with zero abundance
+  as.matrix()
+
+# Check that no zero abundance OTUs are left
+otu.vegan.ss.nozero %>%
+  as.data.frame() %>%
+  select(where(~ sum(.x) == 0)) %>%
+  ncol()
+```
+
+How many OUTs have less than 10 reads?
+
+```{r}
+otu.vegan.ss.nozero %>%
+  as.data.frame() %>%
+  select(where(~ sum(.x) < 10)) %>%
+  ncol()
+```
+
+Let's check dimensions of the tables:
+
+```{r}
+dim(otu.vegan.ss)
+dim(otu.vegan.ss.nozero)
+```
+
+\-*How many OTUs have been removed?* There are other ways to transform and normalise the data, but we will not go into the details in this course.
+
+*Phew* That was Part I. Now before you have a break save the data so it can be loaded if you want to use some of the same data for the next session.
+This way you don't have to redo all analysis for the next lab.
+
+```{r}
+save.image("AB332_lab_I.RData")
+```

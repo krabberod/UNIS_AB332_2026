@@ -1,0 +1,370 @@
+---
+title: "Introduction to R and Rstudio"
+author: "Anders K. Krabberød and Ramiro Logares"
+date: "October 2026"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook.  Markdown is a lightweight markup language for creating formatted text using a plain-text editor. For more information see the book [R Markdown: The Definitive Guide](https://bookdown.org/yihui/rmarkdown/).
+
+When you execute code within the notebook, the results appear beneath the code.
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*.
+
+Example:
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I* (macOS) or *Ctrl+Alt+I* (Windows).
+
+```{r}
+
+```
+
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+# Basic operations
+
+```{r}
+6+6 # sums two numbers. The answer will appear underneath:
+6-6
+6*6
+6/6
+log(6)
+log2(6)
+log10(6)
+log(6,10)
+log(6,3)
+6^6
+sin(pi/2)
+cos(pi/2)
+# ETC
+```
+
+The hashtag `#` can be used inside chunks for commenting.
+
+Define a variable with `<-`
+You can also use an equal sign, but this is not recommended. The "arrow" makes the code easier to read.
+```{r}
+mysum <- 6+6 #sum two integers and assign it to a variable
+mysum = 6+6 #same as above
+mysum #check variable content by executing "mysum"
+
+```
+
+Check the list of variables defined so far
+```{r}
+ls()
+```
+
+The same variables are also listed in the *Environment* panel of RStudio
+
+Remove a variable:
+```{r}
+rm(mysum)
+rm(list=ls()) # NB will remove all variables!
+```
+
+# Objects or data structures: Vectors, Lists, Matrices, Arrays, Factors, Data frames
+Basic datatypes on which R objects are built
+
+**Numeric:** numbers with decimals
+```{r}
+mynumber<-66.6
+print(mynumber)
+class(mynumber) # check the type
+
+#Integer: numbers with no decimals
+mynumber.int<-as.integer(mynumber)
+class(mynumber.int)
+mynumber.int
+```
+
+
+**Character**: can be a letter or a combination of letters enclosed by quotes
+```{r}
+mychar<-"bioinfo course"
+mychar
+class(mychar)
+```
+
+**Logical**: a variable that can be TRUE or FALSE (boolean)
+```{r}
+im.true<-TRUE
+im.true
+class(im.true)
+```
+
+**Factor**: used to refer to a qualitative relationship.
+to generate a factor, we'll use a vector defined with the function ```c()```
+
+```{r}
+myfactor<-factor(c("good", "bad", "ugly", "good","good","bad", "ugly"))
+myfactor
+class(myfactor)
+levels(myfactor) # this can be used to check the levels of a factor
+nlevels(myfactor)
+class(levels(myfactor))
+
+```
+
+**Lists**
+It can contain elements of various data types (e.g.vectors,functions,matrices,another list)
+Example with three different data types in one list
+```{r}
+list1<-c(1:5) # integer vector
+list2<-factor(1:5) # factor vector
+list3<-letters[1:5]
+grouped.lists<-list(list1,list2,list3)
+grouped.lists
+```
+
+Accessing elements of a list
+```{r}
+grouped.lists[[1]] # accessing the first vector
+grouped.lists[[3]][4] # accessing the 5th element from the third vector
+```
+Ungroup the list
+```{r}
+ungrouped.list<-unlist(grouped.lists)
+class(ungrouped.list)  # NB: the list becomes a character datatype. WHY?
+length(ungrouped.list)
+length(grouped.lists)
+```
+
+**Vectors**
+Objects that are used to store values or other information of the same data type
+They are created with the function "c()" that will generate a 1D array
+```{r}
+species<-c(123,434,655,877,986) # we create a numeric vector
+class(species)
+length(species) # number of elements in the vector
+species[5] # accessing the fifth element in the vector
+species[1:3]
+sum(species) # sum the values in the vector
+```
+```{r}
+species.names<-c("dog","lion","human","pig","cow") # we create a character vector
+class(species.names)
+```
+Create a sequence of numbers:
+```{r}
+seq.num<-c(3:10)
+seq.num
+```
+
+```{r}
+seq.num.by2<-seq(1,100, 3)
+```
+
+we can access the 5th to the 10th element using the ```:```
+```{r}
+seq.num.by2[5:10]
+```
+
+**Matrix**  
+Like a vector, a matrix stores information of the same data type, but it has 2 dimensions.
+
+syntax for generating a matrix:  
+`mymatrix <- matrix(vector, nrow=r, ncol=c, byrow=FALSE, dimnames=list(char_vector_rownames, char_vector_colnames))```  
+
+ `byrow=F`  indicates that the matrix should be filled by columns
+```{r}
+mymatrix <- matrix(seq(1:100), nrow=10, ncol=10, byrow=FALSE, dimnames=list(c(1:10), letters[1:10]))
+mymatrix
+```
+
+A matrix with random numbers:
+```{r}
+mymatrix.rand <- matrix(sample (seq(1:100),100), nrow=10, ncol=10, byrow=FALSE, dimnames=list(c(1:10), letters[1:10]))
+mymatrix.rand
+```
+
+
+```{r}
+mymatrix[3:6,1:3] # We select what sections of the matrix we want to look at
+```
+
+**Dataframes** are more general than a matrix and can contain different data types.  
+Variables or features are in columns, while observations are in rows.  
+=>NB: this is one of the most common objects in metabarcoding analyses<=
+Generated with the `data.frame()` function
+```{r}
+my.data.frame<-data.frame(
+  Name=c("Game of Thrones","MrRobot","WestWorld"),
+  Budget=c(344,59,122),
+  Seasons=c(8,4,3),
+  Audience=c(300,14,80),
+  Actors=c(221,56, 90)
+)
+print(my.data.frame)
+```
+
+```{r}
+row.names(my.data.frame)<-my.data.frame[,1] # Assign to the row names the names in the first column
+my.data.frame<-my.data.frame[,-1] # Remove the fisrt column
+my.data.frame # By clicking this object in the "Environment" panel on the right, you'll see a window with the dataframe
+```
+
+```{r}
+class(my.data.frame)
+ncol(my.data.frame) # Number of columns
+nrow(my.data.frame) # Number of rows
+colnames(my.data.frame) # Column names
+rownames(my.data.frame) # Name of rows
+colSums(my.data.frame) # Sum values in columns
+rowSums(my.data.frame) # We sum the values, even if they make no sense in the example
+rbind(my.data.frame,my.data.frame) #  appends dataframes one below the other (column names identical)
+cbind(my.data.frame,my.data.frame) # appends dataframes one next to the other (row names identical)
+head(my.data.frame, 2) # Useful to have a look to the beginning of the dataframe (specially useful in big tables)
+my.data.frame[1:2,2:4] # Useful to look at specific sections of the dataframe
+```
+
+
+Let's generate a dataframe with different data types
+```{r}
+my.data.frame.2<-data.frame(
+  Name=c("Game of Thrones","MrRobot","WestWorld", "Chernobyl"),
+  Rating=c("Excellent","Very Good","Excellent", "Very Good"),
+  Audience.Restriction=c(TRUE,FALSE,TRUE, FALSE)
+)
+my.data.frame.2
+```
+Rename the row names
+```{r}
+
+row.names(my.data.frame.2)<-my.data.frame.2[,1]
+my.data.frame.2
+my.data.frame.2<-my.data.frame.2[,-1] # Remove redundant column 1
+my.data.frame.2
+str(my.data.frame.2) # Let's look at the data types within this dataframe
+```
+
+# Variables in this case are characters and logical (TRUE/FALSE)
+
+#Merge two dataframes based in a pattern
+# We will use the series names to merge these dataframes as this is what they have in common
+```{r}
+data.frame.large<-merge(my.data.frame, my.data.frame.2, by="row.names") # "by" indicates the column used for merging
+```
+
+
+#Useful commands to work with tables or dataframes
+```{r}
+getwd() # get working directory
+```
+You can change the working directory:
+```{r}
+#setwd("path/to/my/directory") # set working directory
+```
+
+```{#r}
+#my.table<-read.table(file="table.tsv", sep="\t", header=T) # read table; several other options available
+dim(my.table) # Table dimensions
+nrow(my.table) # Number of rows
+ncol(my.table) # Number of columns
+colnames(my.table) # Name of columns
+rownames(my.table) # Name of rows
+colSums(my.table) # Sum of numeric values in columns
+rowSums(my.table) # Sum of numeric values in rows
+head(my.table) # See table header
+t(my.table) # Transpose table
+```
+
+Table subsetting
+Format:  `my.table[row, column]`
+
+```{#r}
+my.table[1,2] #Get value from row 1, column 2
+my.table[1,]  #Get values from row 1 across all columns
+my.table$column.name<-NULL #Remove column
+my.table[-5,-2] # Remove row 5 and column 2
+my.table[-(5:10),] # Remove rows 5 to 10, keep all columns
+my.table[,-(which(colSums(my.table)==0))] # Remove columns that sum 0
+```
+
+# Installing packages
+R has a large repository of packages for different applications
+```{#r}
+install.packages("vegan") # Installs the community ecology package Vegan with hundreds of functions
+library("vegan") # load Vegan
+```
+
+#Plotting
+```{r}
+data("mtcars") # We load a dataset that comes with R
+```
+The data was extracted from the 1974 Motor Trend US magazine, and comprises fuel consumption and 10 aspects
+of automobile design and performance for 32 automobiles (1973–74 models).
+```
+#Data structure
+#                      mpg cyl  disp  hp drat    wt  qsec vs am gear carb
+# Mazda RX4           21.0   6 160.0 110 3.90 2.620 16.46  0  1    4    4
+# Mazda RX4 Wag       21.0   6 160.0 110 3.90 2.875 17.02  0  1    4    4
+# Datsun 710          22.8   4 108.0  93 3.85 2.320 18.61  1  1    4    1
+# Hornet 4 Drive      21.4   6 258.0 110 3.08 3.215 19.44  1  0    3    1
+# ...
+
+# [, 1]	mpg	Miles/(US) gallon
+# [, 2]	cyl	Number of cylinders
+# [, 3]	disp	Displacement (cu.in.)
+# [, 4]	hp	Gross horsepower
+# [, 5]	drat	Rear axle ratio
+# [, 6]	wt	Weight (1000 lbs)
+# [, 7]	qsec	1/4 mile time
+# [, 8]	vs	Engine (0 = V-shaped, 1 = straight)
+# [, 9]	am	Transmission (0 = automatic, 1 = manual)
+# [,10]	gear	Number of forward gears
+# [,11]	carb	Number of carburetors
+```
+
+```{r}
+#boxplot(mtcars) # make a boxplot of variables across car models
+
+plot(mtcars, pch=19, cex=0.6) # make x-y plots for all variables
+
+plot(mtcars$hp, mtcars$mpg, xlab="Horsepower", ylab="Miles/gallon", pch=19) # we plot horsepower vs. miles per gallon
+text(mtcars$hp, mtcars$mpg, row.names(mtcars), cex=0.7) # we add the car model
+
+plot(mtcars$hp, mtcars$mpg, xlab="Horsepower", ylab="Miles/gallon", pch=19, col=ifelse(mtcars$mpg<20,"red", "green")) # We color dots according to a condition (20<x<20 mpg)
+text(mtcars$hp, mtcars$mpg, row.names(mtcars), cex=0.7) # we add the car model
+abline(h=20, col="brown") # add a line to the plot
+
+hist(mtcars$hp, col="salmon")
+abline(v=mean(mtcars$hp), col="blue", lwd=3, lty=2)
+plot(density(mtcars$hp))
+
+brands<-c("Mazda", "Mazda","Datsun", "Hornet", "Hornet", "Valiant", "Duster", "Merc", "Merc", "Merc", "Merc", "Merc","Merc","Merc","Cadillac","Lincoln","Chrysler","Fiat",
+          "Honda", "Toyota", "Toyota","Dodge","AMC","Camaro","Pontiac", "Fiat","Porsche", "Lotus", "Ford","Ferrari", "Maseratti","Volvo")
+mtcars$brand<-brands # we add an extra column with brands
+mtcars[1:5,] # let's check
+pie(table(mtcars$brand)) # we make a piechart of the brands
+```
+
+>For plotting the package ggplot2 is very becomming increasingly popular: It is already included in the package **tidyverse**, but can also be installed by itself:
+
+```{r}
+#install.packages("ggplot2")
+library(ggplot2)
+```
+
+# Some tips and hits
+Use "?" before any function to get the help page.
+```{r}
+?sum
+```
+
+If you don't know where a function is from use "??":
+```{r}
+??rarefy
+```
+
+
+
+## End

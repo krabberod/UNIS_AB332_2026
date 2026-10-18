@@ -1,0 +1,278 @@
+---
+title: 'Community ecology - Computer lab III - AB332'
+author: "Anders K. Krabberød (UiO) and Ramiro Logares (ICM)"
+date: "October 2026"
+output:
+  html_notebook: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+# Computer lab III
+
+### First load the necessary packages.
+```{r,include=FALSE}
+library(tidyverse)
+library(vegan)
+library(corrplot)
+library(RcmdrMisc)
+library(ggrepel)   # For geom_text_repel function
+```
+
+Load data from previous lab (if it is not already in the environment)
+```{r}
+load("AB332_lab_II.RData")
+# This should load all previous variables including metadata from Lab II
+# If you get an error, make sure you have run Computer_lab_II.Rmd first
+```
+
+### Analyses using environmental variation
+The aim is to investigate how the environmental variation may explain community variance.
+
+Check the variables available in the metadata:
+```{r}
+colnames(metadata)
+```
+
+We select the continuous environmental variables that we want to use:
+```{r}
+env_vars <- c("temp_25", "sal_25", "F_25", "nitrate", "phosphate", "silicate", "N_P", "chla_GFF", "daylength")
+
+env <- metadata %>%
+  select(Sample_Name, all_of(env_vars))
+env
+```
+
+We transform variables using z-scores to have comparable ranges of variation.
+**Important**: We only scale continuous environmental variables, not categorical ones like year, month, or season.
+
+```{r}
+env.zscores <- env %>%
+  mutate(across(all_of(env_vars), ~ as.numeric(scale(.x))))
+
+# Check result
+summary(env.zscores)
+```
+
+Let's check if the environmental variables are correlated to each other.
+We Calculate correlations and p-values:
+```{r}
+env.corr.signif.adjust <- env.zscores %>%
+  select(all_of(env_vars)) %>%
+  as.matrix() %>%
+  RcmdrMisc::rcorr.adjust()  # uses Hmisc::rcorr internally
+```
+
+The p-values are corrected for multiple inference using Holm's method (see p.adjust).
+More info on: https://en.wikipedia.org/wiki/Multiple_comparisons_problem
+Holm corrected values for multiple comparisons
+```{r}
+env.corr.signif.r <- env.corr.signif.adjust$R$r
+env.corr.signif.p <- env.corr.signif.adjust$P
+# Edit the object to replace any "<" by "0" using the function "gsub"
+env.corr.signif.p <- gsub("<","0", env.corr.signif.p)
+
+# Modify the object to be numeric datatype.
+# NB: the transformation is done so the matrix of p values can be read as numeric!
+env.corr.signif.p <- apply(env.corr.signif.p, 2 ,as.numeric)
+rownames(env.corr.signif.p) <- colnames(env.corr.signif.p)
+```
+
+Plot the correlation plot:
+```{r}
+corrplot(env.corr.signif.r , type="upper", order="hclust",
+         p.mat = env.corr.signif.p, sig.level = 0.05,
+         insig = "pch",hclust.method = c("average"),
+         tl.cex= 0.8, tl.col="black", diag=F)
+```
+
+### Fitting environmental variables to ordinations
+`envfit` will fit the environmental variables to the NMDS ordination as vectors
+Now we fit the variables to the OTU-table that was rarefied. The samples must be in the same order as in the OTU table:
+```{r}
+env.zscores.ordered <- tibble(Sample_Name = rownames(otu.vegan.ss.nozero)) %>%
+  left_join(env.zscores, by = "Sample_Name") %>%
+  select(-Sample_Name)
+
+# na.rm=TRUE will handle missing values
+otu.vegan.ss.nozero.bray.nmds.envfit <- envfit(otu.vegan.ss.nozero.bray.nmds, env.zscores.ordered,
+                                               permu = 999, na.rm = TRUE, display = "sites")
+otu.vegan.ss.nozero.bray.nmds.envfit
+```
+
+The two last columns indicate the squared correlation coefficient and the associated p-value
+We plot the vectors of the significant correlations
+
+```{r}
+# With many samples, text labels will be crowded
+# Plot with smaller text labels
+plot(otu.vegan.ss.nozero.bray.nmds, type="t", display="sites", cex=0.5,
+     main="NMDS with Environmental Vectors (small labels)")
+plot(otu.vegan.ss.nozero.bray.nmds.envfit, add=TRUE)
+```
+The plotting only the vectors with p<0.05.
+```{r}
+# Plot only significant vectors (p < 0.05) - cleaner visualization
+plot(otu.vegan.ss.nozero.bray.nmds, type="p", display="sites",
+     main="NMDS with Significant Environmental Vectors (p<0.05)")
+plot(otu.vegan.ss.nozero.bray.nmds.envfit, p.max=0.05, add=TRUE)
+```
+
+The same plot with ggplot, using the NMDS scores from lab II and the vectors from envfit:
+```{r}
+envfit.vectors <- scores(otu.vegan.ss.nozero.bray.nmds.envfit, display = "vectors") %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  mutate(pval = otu.vegan.ss.nozero.bray.nmds.envfit$vectors$pvals) %>%
+  filter(pval < 0.05)
+
+ggplot(otu.vegan.ss.nozero.bray.nmds.scores, aes(x = NMDS1, y = NMDS2)) +
+  geom_point(aes(colour = seasons), size = 2) +
+  geom_segment(data = envfit.vectors, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm"))) +
+  geom_text_repel(data = envfit.vectors, aes(x = NMDS1, y = NMDS2, label = variable), size = 3) +
+  coord_fixed() +
+  labs(title = "NMDS with Significant Environmental Vectors (p<0.05)", colour = "Season") +
+  theme_bw()
+```
+
+## Constrained Ordination
+Distance-based redundancy analysis (dbRDA) is an ordination method similar to Redundancy Analysis (rda), but it allows non-Euclidean dissimilarity indices, such as Manhattan or Bray–Curtis distance.
+Selection of the most important (i.e. signficant) variables for dbRDA is done by comparing a null model to the full model and doing a stepwise selection of significant variables.
+
+> Missing values can be dealt with in different ways depending on the situation. Sometimes it is easiest to drop the sample, sometimes you can imput the values of the missing data. The default in the capscale (na.fail) is to stop with missing values. Choices na.omit and na.exclude delete rows with missing values, but differ in representation of results. With na.omit only non-missing site scores are shown, but na.exclude gives NA for scores of missing observations.
+
+Here we drop the samples with missing values, and keep the same samples in the OTU table:
+```{r}
+env.complete <- env.zscores %>%
+  drop_na() %>%
+  column_to_rownames("Sample_Name")
+
+otu.complete <- otu.vegan.ss.nozero %>%
+  as.data.frame() %>%
+  rownames_to_column("Sample_Name") %>%
+  filter(Sample_Name %in% rownames(env.complete)) %>%
+  column_to_rownames("Sample_Name")
+
+nrow(env.complete)  # Number of samples with complete environmental data
+nrow(otu.complete)
+
+otu.complete.bray <- vegdist(otu.complete, method = "bray")
+```
+
+Start with a model containing only species matrix and intercept (the null model):
+```{r}
+mod0.rarefaction <- capscale(otu.complete.bray ~ 1, env.complete)
+mod0.rarefaction
+```
+
+Now make a model including all variables from env matrix (the dot after tilde (~) means ALL!)
+```{r}
+mod1.rarefaction <- capscale(otu.complete.bray ~ ., env.complete)
+mod1.rarefaction
+```
+
+Finally do the stepwise selection of variables:
+```{r}
+ordistep(mod0.rarefaction, scope = formula(mod1.rarefaction), perm.max = 1000, direction="both")
+
+```
+
+
+*Can you see which variables were selected?*
+When doing a stepwise building of models you can this either "forward", "backwards", or "both" (as in the example). Try different methods and see if the end result is any different.
+
+
+## Plot the ordination
+Replace the variables in the formula below with the significant variables from the selection procedure.
+```{r}
+isa.rarified.db <- dbrda(formula = otu.complete.bray ~ daylength + temp_25 + phosphate + F_25 + sal_25, data = env.complete)
+stats::screeplot(isa.rarified.db)
+```
+
+Simple plotting of the dbRDA using the base plotting functions in vegan:
+```{r}
+plot(isa.rarified.db, display = c("sites", "bp"), main = "dbRDA")
+```
+
+For more control of the plot we use ggplot2. First we extract the scores for the samples (sites) and the environmental vectors (biplot arrows), and add the seasons from the metadata:
+```{r}
+db.sites <- scores(isa.rarified.db, display = "sites") %>%
+  as.data.frame() %>%
+  rownames_to_column("Sample_Name") %>%
+  left_join(metadata, by = "Sample_Name")
+
+db.vectors <- scores(isa.rarified.db, display = "bp") %>%
+  as.data.frame() %>%
+  rownames_to_column("variable")
+
+# The arrows are scaled to fit the spread of the samples
+arrow.mul <- 0.8 * max(abs(db.sites$dbRDA1)) / max(abs(db.vectors$dbRDA1))
+db.vectors <- db.vectors %>%
+  mutate(dbRDA1 = dbRDA1 * arrow.mul, dbRDA2 = dbRDA2 * arrow.mul)
+```
+
+```{r}
+ggplot(db.sites, aes(x = dbRDA1, y = dbRDA2)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  geom_segment(data = db.vectors, aes(x = 0, y = 0, xend = dbRDA1, yend = dbRDA2),
+               arrow = arrow(length = unit(0.2, "cm")), colour = "darkred") +
+  geom_text_repel(data = db.vectors, aes(label = variable), colour = "darkred", size = 3) +
+  coord_fixed() +
+  labs(title = "dbRDA") +
+  theme_bw()
+```
+
+The samples can be coloured by a variable from the metadata, for instance the seasons:
+```{r}
+ggplot(db.sites, aes(x = dbRDA1, y = dbRDA2)) +
+  geom_point(aes(colour = seasons), size = 2) +
+  stat_ellipse(aes(colour = seasons)) + # Remove this line if you do not want ellipses
+  geom_segment(data = db.vectors, aes(x = 0, y = 0, xend = dbRDA1, yend = dbRDA2),
+               arrow = arrow(length = unit(0.2, "cm"))) +
+  geom_text_repel(data = db.vectors, aes(label = variable), size = 3) +
+  coord_fixed() +
+  labs(title = "dbRDA - Colored by Season", colour = "Season") +
+  theme_bw()
+```
+- *Try to plot axis 1 and 3 instead (hint: you need `choices = c(1, 3)` in `scores()`).*
+
+<!-- # For those who need more:  -->
+<!-- ## Constrained Correspondence Analyses (CCA) -->
+<!-- - suitable for linear variables -->
+<!-- Selection of the most important variables -->
+
+<!-- ```{r} -->
+<!-- mod0.cca.rarefaction <- cca(otu.complete ~ 1, env.complete) # model containing only species matrix and intercept -->
+<!-- mod1.cca.rarefaction <- cca(otu.complete ~ ., env.complete) # # model including all variables from env matrix (the dot after tilde (~) means ALL!) -->
+<!-- ordistep(mod0.cca.rarefaction, scope = formula(mod1.cca.rarefaction), perm.max = 1000, direction="forward") -->
+<!-- ``` -->
+
+<!-- Replace the variables in the formula below with the significant variables from the selection procedure. -->
+<!-- ```{r} -->
+<!-- isa.cca <- cca(formula = otu.complete ~ chla_GFF + silicate + N_P, data = env.complete) -->
+
+<!-- stats::screeplot(isa.cca) -->
+<!-- ``` -->
+<!-- Plotting with the base plotting functions in vegan -->
+
+<!-- ```{r} -->
+<!-- plot(isa.cca, display = c("sites", "bp")) -->
+<!-- ``` -->
+
+
+<!-- # Permanova -->
+<!-- Analysis of variance using distance matrices — for partitioning distance matrices among sources of variation and fitting linear models (e.g., factors, polynomial regression) to distance matrices; uses a permutation test with pseudo-F ratios.   -->
+
+<!-- ```{r} -->
+<!-- adonis2(otu.complete ~ silicate + temp_25 + sal_25 + F_25 + phosphate, -->
+<!--        data = env.complete, -->
+<!--        method="bray", permutations=9999) -->
+<!-- ``` -->
+
+
+Finally save!
+```{r}
+save.image("AB332_lab_III.RData")
+```
